@@ -79,7 +79,6 @@ module Capybara::Poltergeist
           # Zed's dead, baby
         end
         @out_thread.kill
-        @write_io.close
         @read_io.close
         ObjectSpace.undefine_finalizer(self)
         @pid = nil
@@ -103,7 +102,10 @@ module Capybara::Poltergeist
     private
 
     # This abomination is because JRuby doesn't support the :out option of
-    # Process.spawn
+    # Process.spawn and there are troubles with IO.popen on Rubinius. Please
+    # notice also that @write_io is useless for parent process and must be
+    # closed regarding IPC and MRI docs, but it's the reason why JRuby misses
+    # subprocess' output.
     def redirect_stdout
       prev = STDOUT.dup
       prev.autoclose = false
@@ -111,6 +113,7 @@ module Capybara::Poltergeist
       STDOUT.reopen(@write_io)
       yield
     ensure
+      @write_io.close unless RUBY_PLATFORM == 'java'
       STDOUT.reopen(prev)
       $stdout = STDOUT
     end
