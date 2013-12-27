@@ -58,9 +58,7 @@ module Capybara::Poltergeist
       end
     end
 
-    # FIXME: It definitely must be fixed on jruby, because all futher tests fail
     it 'raises an error and restarts the client if the client dies while executing a command' do
-      pending 'Temporarily disabled for jruby' if RUBY_PLATFORM == 'java'
       expect { @driver.browser.command('exit') }.to raise_error(DeadClient)
       @session.visit('/')
       expect(@driver.html).to include('Hello world')
@@ -188,6 +186,36 @@ module Capybara::Poltergeist
         @driver.save_screenshot(Pathname(file))
 
         expect(File.exist?(file)).to be_true
+      end
+
+
+      shared_examples 'when #zoom_factor= is set' do
+        let(:format) {:xbm}
+        it 'changes image dimensions' do
+          @session.visit('/poltergeist/zoom_test')
+
+          black_pixels_count = ->(file) {
+            File.read(file).to_s[/{.*}/m][1...-1].split(/\W/).map{|n| n.hex.to_s(2).count('1')}.reduce(:+)
+          }
+          @driver.save_screenshot(file)
+          before = black_pixels_count[file]
+
+          @driver.zoom_factor = zoom_factor
+          @driver.save_screenshot(file)
+          after = black_pixels_count[file]
+
+          expect(after.to_f/before.to_f).to eq(zoom_factor**2)
+        end
+      end
+
+      context 'zoom in' do
+        let(:zoom_factor) { 2 }
+        include_examples 'when #zoom_factor= is set'
+      end
+
+      context 'zoom out' do
+        let(:zoom_factor) { 0.5 }
+        include_examples 'when #zoom_factor= is set'
       end
 
       context 'when #paper_size= is set' do
@@ -452,6 +480,26 @@ module Capybara::Poltergeist
       end
     end
 
+    context "phantomjs {'status': 'fail'} responses" do
+      before { @port = @session.server.port }
+      it "Do not occur when DNS correct" do
+        expect { @session.visit("http://localhost:#{@port}/") }.not_to raise_error
+      end
+
+      it "Should handle when DNS incorrect" do
+        expect { @session.visit("http://nope:#{@port}/") }.to raise_error(StatusFailError)
+      end
+      it "Should have a descriptive message when DNS incorrect" do
+        begin
+          @session.visit("http://nope:#{@port}/")
+        rescue StatusFailError => e
+          expect(e.message).to include("Request failed to reach server, check DNS and/or server status")
+        else
+          raise "expected StatusFailError"
+        end
+      end
+    end
+
     context "network traffic" do
       before do
         @driver.restart
@@ -690,6 +738,111 @@ module Capybara::Poltergeist
         @session.within_frame 'framename' do
           expect(@session.html).not_to include('We shouldn\'t see this.')
         end
+      end
+    end
+
+    context 'has ability to send keys' do
+      before { @session.visit('/poltergeist/send_keys') }
+
+      it 'sends keys to empty input' do
+        input = @session.find(:css, '#empty_input')
+
+        input.native.send_keys('Input')
+
+        expect(input.value).to eq('Input')
+      end
+
+      it 'sends keys to filled input' do
+        input = @session.find(:css, '#filled_input')
+
+        input.native.send_keys(' appended')
+
+        expect(input.value).to eq('Text appended')
+      end
+
+      it 'sends keys to empty textarea' do
+        input = @session.find(:css, '#empty_textarea')
+
+        input.native.send_keys('Input')
+
+        expect(input.value).to eq('Input')
+      end
+
+      it 'sends keys to filled textarea' do
+        input = @session.find(:css, '#filled_textarea')
+
+        input.native.send_keys(' appended')
+
+        expect(input.value).to eq('Description appended')
+      end
+
+      it 'sends keys to empty contenteditable div' do
+        input = @session.find(:css, '#empty_div')
+
+        input.native.send_keys('Input')
+
+        expect(input.text).to eq('Input')
+      end
+
+      it 'sends keys to filled contenteditable div' do
+        input = @session.find(:css, '#filled_div')
+
+        input.native.send_keys(' appended')
+
+        expect(input.text).to eq('Content appended')
+      end
+
+      it 'sends sequences' do
+        input = @session.find(:css, '#empty_input')
+
+        input.native.send_keys(:Shift, 'S', :Alt, 't', 'r', 'i', 'g', :Left, 'n')
+
+        expect(input.value).to eq('String')
+      end
+
+      it 'submits the form with sequence' do
+        input = @session.find(:css, '#without_submit_button input')
+
+        input.native.send_keys(:Enter)
+
+        expect(input.value).to eq('Submitted')
+      end
+
+      it 'raises error on modifier' do
+        input = @session.find(:css, '#empty_input')
+
+        expect { input.native.send_keys([:Shift, 's'], 'tring') }
+          .to raise_error(Capybara::Poltergeist::Error)
+      end
+
+      it 'has an alias' do
+        input = @session.find(:css, '#empty_input')
+
+        input.native.send_key('S')
+
+        expect(input.value).to eq('S')
+      end
+    end
+
+    context "set" do
+      before { @session.visit('/poltergeist/set') }
+
+      it "sets a contenteditable's content" do
+        input = @session.find(:css, '#filled_div')
+        input.set('new text')
+        expect(input.text).to eq('new text')
+      end
+
+      it "sets multiple contenteditables' content" do
+        input = @session.find(:css, '#empty_div')
+        input.set('new text')
+
+        expect(input.text).to eq('new text')
+
+        input = @session.find(:css, '#filled_div')
+        input.set('replacement text')
+
+        expect(input.text).to eq('replacement text')
       end
     end
   end
