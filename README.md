@@ -1,3 +1,14 @@
+## Reason for fork
+https://github.com/teampoltergeist/poltergeist/pull/438 rebased onto poltergeist master.
+
+```ruby
+page.driver.eval_on_resource_requested <<-JS
+  function (request) {
+    return request.url.match('127.0.0.1');
+  }
+  JS
+```
+
 # Poltergeist - A PhantomJS driver for Capybara #
 
 [![Build Status](https://secure.travis-ci.org/teampoltergeist/poltergeist.png)](http://travis-ci.org/teampoltergeist/poltergeist)
